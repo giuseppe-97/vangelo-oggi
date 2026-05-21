@@ -48,20 +48,16 @@ async function loadArticle() {
 
   try {
 
-    const rssUrl =
-      "https://getupandwalk.gesuiti.it/feed/";
+    const api =
+      "https://getupandwalk.gesuiti.it/wp-json/wp/v2/posts?per_page=1";
 
-    const proxy =
-      "https://api.rss2json.com/v1/api.json?rss_url=";
+    const response =
+      await fetch(api);
 
-    const feedResponse =
-      await fetch(proxy + encodeURIComponent(rssUrl));
+    const posts =
+      await response.json();
 
-    const feedData =
-      await feedResponse.json();
-
-    const latest =
-      feedData.items[0];
+    const latest = posts[0];
 
     if(!latest){
       document.getElementById("content").innerHTML =
@@ -69,13 +65,13 @@ async function loadArticle() {
       return;
     }
 
-    let html = latest.content;
+    let html = latest.content.rendered;
 
     html = html.replace(/<img[^>]*>/gi, "");
     html = html.replace(/<figure[\s\S]*?<\/figure>/gi, "");
 
     document.getElementById("content").innerHTML = `
-      <h1>${latest.title}</h1>
+      <h1>${latest.title.rendered}</h1>
       ${html}
     `;
 
