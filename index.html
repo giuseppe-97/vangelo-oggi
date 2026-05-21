@@ -1,91 +1,95 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Vangelo Oggi</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <style>
-    body{
-      font-family:-apple-system,BlinkMacSystemFont,sans-serif;
-      max-width:700px;
-      margin:auto;
-      padding:24px;
-      line-height:1.8;
-      background:#fafafa;
-      color:#111;
-      font-size:20px;
-    }
+<title>Vangelo Oggi</title>
 
-    h1,h2,h3{
-      line-height:1.3;
-    }
+<style>
+body{
+  font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+  max-width:700px;
+  margin:auto;
+  padding:24px;
+  line-height:1.8;
+  background:#fafafa;
+  color:#111;
+  font-size:20px;
+}
 
-    img,
-    nav,
-    footer,
-    aside,
-    iframe{
-      display:none!important;
-    }
+img,
+nav,
+aside,
+footer,
+iframe{
+  display:none!important;
+}
 
-    a{
-      color:#666;
-      text-decoration:none;
-    }
+h1,h2,h3{
+  line-height:1.3;
+}
 
-    .meta{
-      color:#777;
-      font-size:15px;
-      margin-bottom:30px;
-    }
-  </style>
+.loading{
+  color:#777;
+}
+</style>
 </head>
 
 <body>
-  <div id="content">
-    Caricamento...
-  </div>
+
+<div id="content" class="loading">
+Caricamento articolo...
+</div>
 
 <script>
-async function loadArticle(){
 
-  const proxy = "https://api.allorigins.win/raw?url=";
-  const home = "https://getupandwalk.gesuiti.it/";
+async function loadArticle() {
 
-  const homeHtml = await fetch(proxy + encodeURIComponent(home))
-    .then(r => r.text());
+  try {
 
-  const parser = new DOMParser();
-  const homeDoc = parser.parseFromString(homeHtml, "text/html");
+    const rssUrl =
+      "https://getupandwalk.gesuiti.it/feed/";
 
-  const firstLink = homeDoc.querySelector("h2 a");
+    const proxy =
+      "https://api.rss2json.com/v1/api.json?rss_url=";
 
-  if(!firstLink){
+    const feedResponse =
+      await fetch(proxy + encodeURIComponent(rssUrl));
+
+    const feedData =
+      await feedResponse.json();
+
+    const latest =
+      feedData.items[0];
+
+    if(!latest){
+      document.getElementById("content").innerHTML =
+        "Nessun articolo trovato";
+      return;
+    }
+
+    let html = latest.content;
+
+    html = html.replace(/<img[^>]*>/gi, "");
+    html = html.replace(/<figure[\s\S]*?<\/figure>/gi, "");
+
+    document.getElementById("content").innerHTML = `
+      <h1>${latest.title}</h1>
+      ${html}
+    `;
+
+  } catch(err){
+
     document.getElementById("content").innerHTML =
-      "Articolo non trovato";
-    return;
-  }
+      "Errore caricamento contenuto";
 
-  const articleUrl = firstLink.href;
-
-  const articleHtml = await fetch(proxy + encodeURIComponent(articleUrl))
-    .then(r => r.text());
-
-  const articleDoc = parser.parseFromString(articleHtml, "text/html");
-
-  const article = articleDoc.querySelector("article");
-
-  if(article){
-    document.getElementById("content").innerHTML =
-      article.innerHTML;
-  } else {
-    document.getElementById("content").innerHTML =
-      "Contenuto non trovato";
+    console.error(err);
   }
 }
 
 loadArticle();
+
 </script>
 
 </body>
