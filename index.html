@@ -50,13 +50,15 @@ async function loadArticle() {
     const parser = new DOMParser();
     const homeDoc = parser.parseFromString(homeHtml, "text/html");
 
-    // 2️⃣ Trova il primo articolo del giorno
-    const firstLink = homeDoc.querySelector("h2 a");
-    if(!firstLink){
-      document.getElementById("content").innerHTML = "Articolo non trovato";
-      return;
-    }
-    const articleUrl = firstLink.href;
+   // 2️⃣ Trova il primo articolo del giorno
+const firstArticle = homeDoc.querySelector("main article");
+const firstLink = firstArticle ? firstArticle.querySelector("a") : null;
+
+if(!firstLink){
+  document.getElementById("content").innerHTML = "Articolo non trovato";
+  return;
+}
+const articleUrl = firstLink.href;
 
     // 3️⃣ Scarica pagina completa dell’articolo
     const articleHtml = await fetch(proxy + encodeURIComponent(articleUrl)).then(r => r.text());
