@@ -1,90 +1,324 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vangelo Oggi</title>
-<style>
-  body{
-    font-family:-apple-system,BlinkMacSystemFont,sans-serif;
-    max-width:700px;
-    margin:auto;
-    padding:24px;
-    line-height:1.8;
-    background:#fafafa;
-    color:#111;
-    font-size:20px;
-  }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Vangelo" />
+  <link rel="apple-touch-icon" href="icon.png" />
+  <title>Vangelo del giorno</title>
+  <style>
+    /* ── Reset e variabili ── */
+    :root {
+      --bg: #faf8f4;
+      --text: #1a1a1a;
+      --accent: #7a5c3a;
+      --muted: #888;
+      --font: Georgia, 'Times New Roman', serif;
+      --line: 1.85;
+      --max: 680px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  h1,h2,h3{
-    line-height:1.3;
-  }
-
-  /* Nascondi elementi inutili */
-  nav, aside, footer, iframe, script, style {
-    display:none!important;
-  }
-
-  #content > * {
-    display:block!important;
-  }
-
-  .loading{
-    color:#777;
-  }
-</style>
-</head>
-<body>
-
-<div id="content" class="loading">Caricamento articolo...</div>
-
-<script>
-async function loadArticle() {
-  try {
-    // Homepage del sito
-    const homeUrl = "https://getupandwalk.gesuiti.it/";
-    const proxy = "https://api.allorigins.win/raw?url=";
-
-    // 1️⃣ Scarica homepage
-    const homeHtml = await fetch(proxy + encodeURIComponent(homeUrl)).then(r => r.text());
-    const parser = new DOMParser();
-    const homeDoc = parser.parseFromString(homeHtml, "text/html");
-
-   // 2️⃣ Trova il primo articolo del giorno
-const firstArticle = homeDoc.querySelector("main article");
-const firstLink = firstArticle ? firstArticle.querySelector("a") : null;
-
-if(!firstLink){
-  document.getElementById("content").innerHTML = "Articolo non trovato";
-  return;
-}
-const articleUrl = firstLink.href;
-
-    // 3️⃣ Scarica pagina completa dell’articolo
-    const articleHtml = await fetch(proxy + encodeURIComponent(articleUrl)).then(r => r.text());
-    const articleDoc = parser.parseFromString(articleHtml, "text/html");
-
-    // 4️⃣ Estrai tutto il contenuto principale
-    const contentDiv = articleDoc.querySelector(".entry-content");
-    if(!contentDiv){
-      document.getElementById("content").innerHTML = "Contenuto non trovato";
-      return;
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: clamp(17px, 4.5vw, 20px);
+      line-height: var(--line);
+      /* Rispetta le safe area di iPhone (notch, barra home) */
+      padding: env(safe-area-inset-top, 20px) env(safe-area-inset-right, 20px)
+               env(safe-area-inset-bottom, 20px) env(safe-area-inset-left, 20px);
     }
 
-    // 5️⃣ Rimuovi immagini e figure
-    contentDiv.querySelectorAll("img, figure").forEach(e => e.remove());
+    main {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 2rem 1.2rem 4rem;
+    }
 
-    // 6️⃣ Inserisci il contenuto completo nella pagina
-    document.getElementById("content").innerHTML = `<h1>${firstLink.textContent}</h1>` + contentDiv.innerHTML;
+    /* ── Stato di caricamento ── */
+    #loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 60vh;
+      gap: 1rem;
+      color: var(--muted);
+      font-style: italic;
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid #ddd;
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
-  } catch(err){
+    /* ── Contenuto articolo ── */
+    #content { display: none; }
+
+    .data {
+      font-size: 0.78em;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-size: clamp(1.5rem, 6vw, 2rem);
+      font-weight: normal;
+      color: var(--accent);
+      margin-bottom: 0.3rem;
+      line-height: 1.3;
+    }
+
+    .autore {
+      font-size: 0.85em;
+      color: var(--muted);
+      font-style: italic;
+      margin-bottom: 2rem;
+      padding-bottom: 1.2rem;
+      border-bottom: 1px solid #ddd;
+    }
+
+    /* ── Tipografia del corpo ── */
+    #testo p {
+      margin-bottom: 1.2em;
+    }
+
+    /* Titoletti interni (h2, h3, h4 presenti nel post) */
+    #testo h2, #testo h3, #testo h4 {
+      font-size: 1em;
+      font-weight: bold;
+      color: var(--accent);
+      margin: 1.8em 0 0.4em;
+      letter-spacing: 0.03em;
+    }
+
+    /* Versi e citazioni in corsivo */
+    #testo em, #testo blockquote {
+      font-style: italic;
+      color: #444;
+    }
+
+    #testo blockquote {
+      border-left: 3px solid var(--accent);
+      padding-left: 1rem;
+      margin: 1.2em 0;
+    }
+
+    /* Nascondi tutto il superfluo */
+    #testo figure,
+    #testo img,
+    #testo .wp-caption,
+    #testo .sharedaddy,
+    #testo .share-this,
+    #testo .jp-relatedposts,
+    #testo .navigation,
+    #testo [class*="share"],
+    #testo [class*="social"],
+    #testo [class*="related"],
+    #testo [class*="advert"],
+    #testo [class*="widget"] {
+      display: none !important;
+    }
+
+    /* ── Errore ── */
+    #errore {
+      display: none;
+      padding: 2rem;
+      text-align: center;
+      color: var(--muted);
+    }
+    #errore a { color: var(--accent); }
+  </style>
+</head>
+<body>
+<main>
+
+  <div id="loading">
+    <div class="spinner"></div>
+    <span>Carico il vangelo di oggi…</span>
+  </div>
+
+  <div id="content">
+    <p class="data" id="data-articolo"></p>
+    <h1 id="titolo"></h1>
+    <p class="autore" id="autore"></p>
+    <div id="testo"></div>
+  </div>
+
+  <div id="errore">
+    <p>Non riesco a caricare il testo.<br>
+    Prova ad aprire direttamente il sito:<br>
+    <a href="https://getupandwalk.gesuiti.it/" target="_blank">getupandwalk.gesuiti.it</a></p>
+  </div>
+
+</main>
+
+<script>
+// ─────────────────────────────────────────────
+//  CONFIGURAZIONE
+// ─────────────────────────────────────────────
+
+// Proxy che aggira il CORS: allorigins (pubblico, zero config)
+// Se usi il tuo Cloudflare Worker, sostituisci questa URL con la tua
+const PROXY = url =>
+  `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+
+const HOME   = 'https://getupandwalk.gesuiti.it/';
+const FEED   = 'https://getupandwalk.gesuiti.it/feed/';
+
+// ─────────────────────────────────────────────
+//  UTILITÀ: formatta la data in italiano
+// ─────────────────────────────────────────────
+function dataItaliana(dateStr) {
+  const mesi = ['gennaio','febbraio','marzo','aprile','maggio','giugno',
+                 'luglio','agosto','settembre','ottobre','novembre','dicembre'];
+  const d = new Date(dateStr);
+  return `${d.getDate()} ${mesi[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+// ─────────────────────────────────────────────
+//  PASSO 1: leggo il feed RSS e ricavo il link
+//  del primo articolo (= quello di oggi)
+// ─────────────────────────────────────────────
+async function getLinkArticolo() {
+  const res  = await fetch(PROXY(FEED));
+  const json = await res.json();
+
+  // allorigins restituisce il contenuto come stringa in json.contents
+  const parser = new DOMParser();
+  const xml    = parser.parseFromString(json.contents, 'application/xml');
+  const item   = xml.querySelector('item');
+
+  if (!item) throw new Error('Nessun articolo trovato nel feed');
+
+  return {
+    link:   item.querySelector('link').textContent.trim(),
+    titolo: item.querySelector('title').textContent.trim(),
+    data:   item.querySelector('pubDate').textContent.trim(),
+    // Nel feed c'è anche l'autore nel namespace dc:creator
+    autore: item.querySelector('creator')?.textContent?.trim() || ''
+  };
+}
+
+// ─────────────────────────────────────────────
+//  PASSO 2: carico la pagina dell'articolo e
+//  estraggo il testo dall'entry-content
+//  (classe standard di WordPress)
+// ─────────────────────────────────────────────
+async function getTesto(linkArticolo) {
+  const res  = await fetch(PROXY(linkArticolo));
+  const json = await res.json();
+
+  const parser = new DOMParser();
+  const doc    = parser.parseFromString(json.contents, 'text/html');
+
+  // WordPress usa sempre .entry-content o .post-content
+  // Tento entrambi per robustezza
+  const corpo = doc.querySelector('.entry-content') ||
+                doc.querySelector('.post-content')  ||
+                doc.querySelector('article');
+
+  if (!corpo) throw new Error('Corpo articolo non trovato');
+
+  // Rimuovo elementi superflui direttamente dal DOM prima di restituire
+  const superflui = [
+    'figure', 'img', '.sharedaddy', '.share-this',
+    '.jp-relatedposts', '[class*="share"]',
+    '[class*="social"]', '[class*="related"]',
+    'script', 'style', '.wp-caption'
+  ];
+  superflui.forEach(sel => {
+    corpo.querySelectorAll(sel).forEach(el => el.remove());
+  });
+
+  return corpo.innerHTML;
+}
+
+// ─────────────────────────────────────────────
+//  PASSO 3: estraggo l'autore dalla pagina
+//  (il feed RSS a volte lo omette)
+// ─────────────────────────────────────────────
+async function getAutore(linkArticolo) {
+  const res  = await fetch(PROXY(linkArticolo));
+  const json = await res.json();
+
+  const parser = new DOMParser();
+  const doc    = parser.parseFromString(json.contents, 'text/html');
+
+  // Nel sito il sottotitolo "commento di Gv X, a cura di Nome" è
+  // in un elemento subito dopo l'h1, o in .entry-subtitle / .post-subtitle
+  const sub = doc.querySelector('.entry-subtitle') ||
+              doc.querySelector('.post-subtitle')  ||
+              // fallback: primo <p> dentro article prima di .entry-content
+              doc.querySelector('article > header p');
+
+  return sub ? sub.textContent.trim() : '';
+}
+
+// ─────────────────────────────────────────────
+//  MAIN: orchestro tutto
+// ─────────────────────────────────────────────
+async function init() {
+  try {
+    // ① Leggo feed → ricavo link + metadati
+    const { link, titolo, data, autore } = await getLinkArticolo();
+
+    // ② Leggo pagina → ricavo testo
+    // (riuso la stessa fetch facendo una sola richiesta alla pagina)
+    const res  = await fetch(PROXY(link));
+    const json = await res.json();
+
+    const parser = new DOMParser();
+    const doc    = parser.parseFromString(json.contents, 'text/html');
+
+    // Corpo
+    const corpo = doc.querySelector('.entry-content') ||
+                  doc.querySelector('.post-content')  ||
+                  doc.querySelector('article');
+    if (!corpo) throw new Error('Testo non trovato');
+
+    // Pulizia DOM
+    ['figure','img','.sharedaddy','.share-this','.jp-relatedposts',
+     '[class*="share"]','[class*="social"]','[class*="related"]',
+     'script','style','.wp-caption'].forEach(sel =>
+      corpo.querySelectorAll(sel).forEach(el => el.remove())
+    );
+
+    // Sottotitolo autore (es. "commento di Gv 17,20-26, a cura di Melania Condò")
+    const sub = doc.querySelector('.entry-subtitle') ||
+                doc.querySelector('.post-subtitle')  ||
+                // cerca il testo subito dopo h1 nella pagina
+                (() => {
+                  const h1 = doc.querySelector('h1.entry-title, h1');
+                  return h1?.nextElementSibling?.tagName !== 'DIV'
+                    ? h1?.nextElementSibling : null;
+                })();
+
+    // ③ Mostro tutto
+    document.getElementById('data-articolo').textContent = dataItaliana(data);
+    document.getElementById('titolo').textContent        = titolo;
+    document.getElementById('autore').textContent        = sub?.textContent?.trim() || autore;
+    document.getElementById('testo').innerHTML           = corpo.innerHTML;
+
+    document.getElementById('loading').style.display  = 'none';
+    document.getElementById('content').style.display  = 'block';
+
+  } catch (err) {
     console.error(err);
-    document.getElementById("content").innerHTML = "Errore caricamento contenuto";
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('errore').style.display  = 'block';
   }
 }
 
-loadArticle();
+init();
 </script>
-
 </body>
 </html>
