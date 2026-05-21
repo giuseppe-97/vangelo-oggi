@@ -168,8 +168,9 @@
 
 // Proxy che aggira il CORS: allorigins (pubblico, zero config)
 // Se usi il tuo Cloudflare Worker, sostituisci questa URL con la tua
+// Il tuo proxy personale su Cloudflare Workers
 const PROXY = url =>
-  `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+  `https://dry-butterfly-0de6.giuseppemc.workers.dev/?url=${encodeURIComponent(url)}`;
 
 const HOME   = 'https://getupandwalk.gesuiti.it/';
 const FEED   = 'https://getupandwalk.gesuiti.it/feed/';
@@ -179,142 +180,75 @@ const FEED   = 'https://getupandwalk.gesuiti.it/feed/';
 // ─────────────────────────────────────────────
 function dataItaliana(dateStr) {
   const mesi = ['gennaio','febbraio','marzo','aprile','maggio','giugno',
-                 'luglio','agosto','settembre','ottobre','novembre','dicembre'];
+                'luglio','agosto','settembre','ottobre','novembre','dicembre'];
   const d = new Date(dateStr);
   return `${d.getDate()} ${mesi[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 // ─────────────────────────────────────────────
-//  PASSO 1: leggo il feed RSS e ricavo il link
-//  del primo articolo (= quello di oggi)
+//  Fetch generico tramite proxy — restituisce testo
 // ─────────────────────────────────────────────
-async function getLinkArticolo() {
-  const res  = await fetch(PROXY(FEED));
-  const json = await res.json();
-
-  // allorigins restituisce il contenuto come stringa in json.contents
-  const parser = new DOMParser();
-  const xml    = parser.parseFromString(json.contents, 'application/xml');
-  const item   = xml.querySelector('item');
-
-  if (!item) throw new Error('Nessun articolo trovato nel feed');
-
-  return {
-    link:   item.querySelector('link').textContent.trim(),
-    titolo: item.querySelector('title').textContent.trim(),
-    data:   item.querySelector('pubDate').textContent.trim(),
-    // Nel feed c'è anche l'autore nel namespace dc:creator
-    autore: item.querySelector('creator')?.textContent?.trim() || ''
-  };
+async function fetchViaProxy(url) {
+  const risposta = await fetch(PROXY(url));
+  if (!risposta.ok) throw new Error(`Errore HTTP: ${risposta.status}`);
+  return await risposta.text(); // il nostro Worker restituisce testo diretto
 }
 
 // ─────────────────────────────────────────────
-//  PASSO 2: carico la pagina dell'articolo e
-//  estraggo il testo dall'entry-content
-//  (classe standard di WordPress)
-// ─────────────────────────────────────────────
-async function getTesto(linkArticolo) {
-  const res  = await fetch(PROXY(linkArticolo));
-  const json = await res.json();
-
-  const parser = new DOMParser();
-  const doc    = parser.parseFromString(json.contents, 'text/html');
-
-  // WordPress usa sempre .entry-content o .post-content
-  // Tento entrambi per robustezza
-  const corpo = doc.querySelector('.entry-content') ||
-                doc.querySelector('.post-content')  ||
-                doc.querySelector('article');
-
-  if (!corpo) throw new Error('Corpo articolo non trovato');
-
-  // Rimuovo elementi superflui direttamente dal DOM prima di restituire
-  const superflui = [
-    'figure', 'img', '.sharedaddy', '.share-this',
-    '.jp-relatedposts', '[class*="share"]',
-    '[class*="social"]', '[class*="related"]',
-    'script', 'style', '.wp-caption'
-  ];
-  superflui.forEach(sel => {
-    corpo.querySelectorAll(sel).forEach(el => el.remove());
-  });
-
-  return corpo.innerHTML;
-}
-
-// ─────────────────────────────────────────────
-//  PASSO 3: estraggo l'autore dalla pagina
-//  (il feed RSS a volte lo omette)
-// ─────────────────────────────────────────────
-async function getAutore(linkArticolo) {
-  const res  = await fetch(PROXY(linkArticolo));
-  const json = await res.json();
-
-  const parser = new DOMParser();
-  const doc    = parser.parseFromString(json.contents, 'text/html');
-
-  // Nel sito il sottotitolo "commento di Gv X, a cura di Nome" è
-  // in un elemento subito dopo l'h1, o in .entry-subtitle / .post-subtitle
-  const sub = doc.querySelector('.entry-subtitle') ||
-              doc.querySelector('.post-subtitle')  ||
-              // fallback: primo <p> dentro article prima di .entry-content
-              doc.querySelector('article > header p');
-
-  return sub ? sub.textContent.trim() : '';
-}
-
-// ─────────────────────────────────────────────
-//  MAIN: orchestro tutto
+//  MAIN
 // ─────────────────────────────────────────────
 async function init() {
   try {
-    // ① Leggo feed → ricavo link + metadati
-    const { link, titolo, data, autore } = await getLinkArticolo();
+    // ── STEP 1: leggo il feed RSS e ricavo link + metadati del primo articolo ──
+    const feedHtml = await fetchViaProxy(FEED);
+    const parser   = new DOMParser();
+    const xml      = parser.parseFromString(feedHtml, 'application/xml');
+    const item     = xml.querySelector('item');
 
-    // ② Leggo pagina → ricavo testo
-    // (riuso la stessa fetch facendo una sola richiesta alla pagina)
-    const res  = await fetch(PROXY(link));
-    const json = await res.json();
+    if (!item) throw new Error('Nessun articolo nel feed');
 
-    const parser = new DOMParser();
-    const doc    = parser.parseFromString(json.contents, 'text/html');
+    const link   = item.querySelector('link').textContent.trim();
+    const titolo = item.querySelector('title').textContent.trim();
+    const data   = item.querySelector('pubDate').textContent.trim();
 
-    // Corpo
+    // ── STEP 2: carico la pagina dell'articolo ed estraggo il testo ──
+    const paginaHtml = await fetchViaProxy(link);
+    const doc        = parser.parseFromString(paginaHtml, 'text/html');
+
+    // WordPress usa quasi sempre .entry-content; ho tre fallback per robustezza
     const corpo = doc.querySelector('.entry-content') ||
                   doc.querySelector('.post-content')  ||
                   doc.querySelector('article');
-    if (!corpo) throw new Error('Testo non trovato');
 
-    // Pulizia DOM
-    ['figure','img','.sharedaddy','.share-this','.jp-relatedposts',
-     '[class*="share"]','[class*="social"]','[class*="related"]',
-     'script','style','.wp-caption'].forEach(sel =>
-      corpo.querySelectorAll(sel).forEach(el => el.remove())
-    );
+    if (!corpo) throw new Error('Corpo articolo non trovato nella pagina');
 
-    // Sottotitolo autore (es. "commento di Gv 17,20-26, a cura di Melania Condò")
-    const sub = doc.querySelector('.entry-subtitle') ||
-                doc.querySelector('.post-subtitle')  ||
-                // cerca il testo subito dopo h1 nella pagina
-                (() => {
-                  const h1 = doc.querySelector('h1.entry-title, h1');
-                  return h1?.nextElementSibling?.tagName !== 'DIV'
-                    ? h1?.nextElementSibling : null;
-                })();
+    // Rimuovo elementi grafici e social dal DOM estratto
+    [
+      'figure', 'img', '.sharedaddy', '.share-this',
+      '.jp-relatedposts', '[class*="share"]', '[class*="social"]',
+      '[class*="related"]', 'script', 'style', '.wp-caption'
+    ].forEach(sel => corpo.querySelectorAll(sel).forEach(el => el.remove()));
 
-    // ③ Mostro tutto
+    // Cerco il sottotitolo ("commento di Gv X, a cura di…")
+    const h1  = doc.querySelector('h1.entry-title, h1');
+    const sub = h1?.nextElementSibling;
+    const autoreTestuale = (sub && sub.tagName !== 'DIV')
+      ? sub.textContent.trim()
+      : item.querySelector('creator')?.textContent?.trim() || '';
+
+    // ── STEP 3: mostro tutto ──
     document.getElementById('data-articolo').textContent = dataItaliana(data);
     document.getElementById('titolo').textContent        = titolo;
-    document.getElementById('autore').textContent        = sub?.textContent?.trim() || autore;
+    document.getElementById('autore').textContent        = autoreTestuale;
     document.getElementById('testo').innerHTML           = corpo.innerHTML;
 
-    document.getElementById('loading').style.display  = 'none';
-    document.getElementById('content').style.display  = 'block';
+    document.getElementById('loading').style.display    = 'none';
+    document.getElementById('content').style.display    = 'block';
 
   } catch (err) {
-    console.error(err);
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('errore').style.display  = 'block';
+    console.error('Errore:', err);
+    document.getElementById('loading').style.display   = 'none';
+    document.getElementById('errore').style.display    = 'block';
   }
 }
 
